@@ -588,7 +588,7 @@ nonwt.refit <- function(model_list) {
 
 
 
-abund.pred.plots <- function(plotting_mods_list) {
+abund.pred.plots <- function(plotting_mods_list, data, variables) {
   
   abund_plots_list <- list()
   abund_plot_names <- list()
@@ -602,9 +602,9 @@ abund.pred.plots <- function(plotting_mods_list) {
                                      margin = "empirical",
                                      vcov = get_varcov(plotting_mods_list[[i]]))
         
-        # construct an agriculture column (for setting the geom_ribbon on the x-axis)
-        preds_rb$crop_rbsc <- seq(min(abund_data_2024$crop_rbsc), 
-                                   max(abund_data_2024$crop_rbsc), 
+        # construct a variable column (for setting the geom_ribbon on the x-axis)
+        preds_rb$crop_rbsc <- seq(min(abund_data$crop_rbsc), 
+                                   max(abund_data$crop_rbsc), 
                                    length.out = nrow(preds_rb))
       }
       
@@ -617,14 +617,14 @@ abund.pred.plots <- function(plotting_mods_list) {
                                      vcov = get_varcov(plotting_mods_list[[i]]))
         
         # construct an agriculture column (for setting the geom_ribbon on the x-axis)
-        preds_rb$agriculture_rbsc <- seq(min(abund_data_2024$agriculture_rbsc), 
-                                           max(abund_data_2024$agriculture_rbsc), 
+        preds_rb$agriculture_rbsc <- seq(min(data$agriculture_rbsc), 
+                                           max(data$agriculture_rbsc), 
                                            length.out = nrow(preds_rb))
       }
       # plot using ggplot
       abund_plots_list[[i]] <- local({
         i <- i
-        pred_plot <- ggplot(data = abund_data, aes(x = agriculture_rbsc, y = redbelly_count/num_coverboards)) +
+        pred_plot <- ggplot(data = data, aes(x = crop_rbsc, y = redbelly_count/num_coverboards)) +
           geom_point(shape = 1, colour = "#a3341f") +
           geom_jitter(height = 0.025, width = 0.15, colour = "#a3341f", shape = 1) +
           # xlim(-1, max(abund_data$agriculture_1000sc)) +
@@ -656,8 +656,8 @@ abund.pred.plots <- function(plotting_mods_list) {
                                     vcov = get_varcov(plotting_mods_list[[i]]))
         
         # construct an agriculture column (for setting the geom_ribbon on the x-axis)
-        preds_g$crop_gsc <- seq(min(abund_data_2024$crop_gsc), 
-                                   max(abund_data_2024$crop_gsc), 
+        preds_g$crop_gsc <- seq(min(data$crop_gsc), 
+                                   max(data$crop_gsc), 
                                    length.out = nrow(preds_g))
       }
       else {
@@ -669,15 +669,15 @@ abund.pred.plots <- function(plotting_mods_list) {
                                     vcov = get_varcov(plotting_mods_list[[i]]))
         
         # construct an agriculture column (for setting the geom_ribbon on the x-axis)
-        preds_g$agriculture_gsc <- seq(min(abund_data_2024$agriculture_gsc), 
-                                         max(abund_data_2024$agriculture_gsc), 
+        preds_g$agriculture_gsc <- seq(min(data$agriculture_gsc), 
+                                         max(data$agriculture_gsc), 
                                          length.out = nrow(preds_g))
       }
       
       # plot using ggplot
       abund_plots_list[[i]] <- local({
         i <- i
-        pred_plot <- ggplot(data = abund_data, aes(x = agriculture_gsc, y = garter_count/num_coverboards), colour = "#107425") +
+        pred_plot <- ggplot(data = abund_data, aes(x = crop_gsc, y = garter_count/num_coverboards), colour = "#107425") +
           geom_point(shape = 1) +
           geom_jitter(height = 0.025, width = 0.15, colour = "#107425", shape = 1) +
           # xlim(-1, max(abund_data$agriculture_gsc)) +
@@ -851,4 +851,3 @@ overdisp_fun <- function(model) {
   pval <- pchisq(Pearson.chisq, df = rdf, lower.tail = FALSE, log.p = TRUE)
   c(chisq = Pearson.chisq, ratio = prat, p = exp(pval))
 }
-
