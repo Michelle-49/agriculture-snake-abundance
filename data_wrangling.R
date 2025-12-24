@@ -1,5 +1,8 @@
-# Organize and format the landcover data from the attribute tables (ArcGIS)
-# and the survey data to get abundance data and svl data
+# 1) Organize and format the landcover data from the attribute tables (ArcGIS)
+# and the survey data to get abundance data and svl data and combine information
+# from other data sheets (eg. # cover boards).
+# 2) Get landcover correlations to figure out scale of max effect to determine the
+# scale for landcover data to use
 
 library(dplyr)
 library(ggplot2)
@@ -8,6 +11,8 @@ library(car)
 library(tidyr)
 library(reshape2)
 library(forcats)  # for fct_recode()
+library(vegan)
+library(ape)
 
 ## Get land cover data
 
@@ -55,7 +60,7 @@ for (i in 1:length(landroad_list)) {
 }
 
 
-# combine crop and pasture into agriculture - not much variation by themselves
+# create more general agriculture variable by combining crop and pasture
 for (i in 1:length(landcover_list)) {
   landcover_list[[i]] <- landcover_list[[i]] %>% 
     mutate(agriculture = crop + pasture)
@@ -66,6 +71,12 @@ for (i in 1:length(landroad_list)) {
     mutate(agriculture = crop + pasture)
 }
 
+
+# calculate a heterogeneity index for each site using the Shannon diversity index
+for (i in 1:length(landroad_list)) {
+  het_index <- diversity(select(landroad_list[[i]], crop:water))
+  landroad_list[[i]] <- cbind(landroad_list[[i]], het_index)
+}
 
 ################################################################################
 
@@ -98,17 +109,29 @@ vc_data <- droplevels(vc_data)
 
 # Get the snake survey data formatted into abundance data and svl data for modelling
 
-# read in snake survey data
-snakesurvey_data <- read.csv("data/survey_data_1.csv")
+# read in snake survey and other data
+snakesurvey_data <- read.csv("data/survey_data.csv")
 num_boards <- read.csv("data/number_boards.csv")
+site_coords <- read.csv("data/site_coords.csv")
+site_connectivity <- read.csv("data/site_connectivity.csv")
 
 # remove sites that were surveyed in 2023 and moved in 2024 but too close to be independent
 snakesurvey_data <- snakesurvey_data %>% 
   subset(!(site %in% c("Nat-ag 7 old", "Nat QC 1 old", "Nat QC 6 old"))) %>% 
-  rename("time_of_day" = "t_midpoint",
-         "sex" = "sex_final")
+  rename("time_of_day" = "t_midpoint")
 
 # get the number of garters and redbellies per survey
+# number of snakes by board
+abund_board <- snakesurvey_data %>%
+  group_by(year, day_of_year, site, board_id, temp_c, time_of_day) %>%
+  summarise(
+    garter_count = sum(spp == "garter" & status == "unique", na.rm = FALSE),
+    redbelly_count = sum(spp == "redbelly" & status == "unique", na.rm = FALSE),
+    .groups = 'keep') %>% 
+  mutate_at(c("site", "board_id"), as.factor)
+abund_board[abund_board == ""] <- NA
+
+# number of snakes by site
 abund_freq <- snakesurvey_data %>%
   group_by(year, day_of_year, site, temp_c, time_of_day) %>%
   summarise(
@@ -120,12 +143,26 @@ abund_freq <- snakesurvey_data %>%
 # append the number of cover boards 
 abund_df <- merge(abund_freq, num_boards, by = "site", all.x = TRUE)
 
+# append the site coordinates
+abund_df <- merge(abund_df, site_coords, by = "site", all.x = TRUE)
+
+# append the connectivity score
+abund_df <- merge(abund_df, site_connectivity, by = "site", all.x = TRUE)
+
 
 # append veg cover
 abund_data <- merge(abund_df, as.data.frame(vc_data), all.x = TRUE)
 
-abund_data <- abund_data %>% mutate_at(c("site", "year"), as.factor)
-abund_data <- abund_data %>% mutate_at("time_of_day", as.numeric)
+abund_board <- merge(abund_board, as.data.frame(vc_data), all.x = TRUE)
+
+# check correlation between cover board ID and vegetation cover
+abund_by_board <- na.omit(abund_board)
+cor(abund_by_board$mean_vc, as.numeric(abund_by_board$board_id))
+
+
+abund_data <- abund_data %>% 
+  mutate_at(c("site", "year", "connected"), as.factor) %>% 
+  mutate_at("time_of_day", as.numeric)
 
 # adjust veg cover data in abundance data frame
 
@@ -160,13 +197,37 @@ abund_data$vc_mod[abund_data$year == 2023] <- NA
 abund_data <- abund_data %>% 
   select(-c("mean_vc"))
 
+
+# check for spatial autocorrelation for abundances
+# get a data frame with the site, snake count, and coords
+abund_site <- abund_data %>% 
+  select(c(site, garter_count, redbelly_count, lat, long)) %>% 
+  group_by(site, lat, long) %>% 
+  summarise(
+    garter_count = sum(garter_count),
+    redbelly_count = sum(redbelly_count)
+  )
+
+# generate a distance matrix
+site_dists <- as.matrix(dist(cbind(abund_site$long, abund_site$lat)))
+# and take the inverse
+site_dists_inv <- 1/site_dists
+diag(site_dists_inv) <- 0  # make the diagonals of the inverse distance matrix 0
+
+# calculate Moran's I for garter abundance
+Moran.I(abund_site$garter_count, site_dists_inv)
+
+# calculate Moran's I for redbelly abundance
+Moran.I(abund_site$redbelly_count, site_dists_inv)
+
+
 ################################################################################
 
 ## SVL data
 
 # get the pertinent svl data from the survey data
 svl_data <- snakesurvey_data %>%
-  select(site, year, day_of_year, temp_c, time_of_day, spp, sex, svl_cm, status)
+  select(site, year, day_of_year, temp_c, time_of_day, spp, sex, age_class, svl_cm, status)
 svl_data <- svl_data %>% 
   filter(
     status == "unique" & 
@@ -174,13 +235,17 @@ svl_data <- svl_data %>%
   )
   
 svl_data <- replace(svl_data, svl_data == "", NA)
-svl_data <- na.omit(svl_data) %>% 
-  mutate_at(c("site", "spp", "sex", "status"), as.factor)
+svl_data <- svl_data %>% 
+  mutate_at(c("site", "year", "spp", "sex", "age_class", "status"), as.factor)
 
-# rename J (juveniles) to U (un-sexed)
-svl_data$sex <- fct_recode(svl_data$sex, U = "J")
 
-# # append the veg cover data
+# append site coords
+svl_data <- merge(svl_data, site_coords, by = "site", all.x = TRUE)
+
+# append connectivity score
+svl_data <- merge(svl_data, site_connectivity, by = "site", all.x = TRUE)
+
+# append the veg cover data
 
 # fill in missing veg cover data (days that were surveyed but not photographed)
 # get the columns from the abund_data, which filled vc for all the survey dates
@@ -197,6 +262,30 @@ svl_data <- svl_data %>%
 # order the factor levels for sex
 svl_data$sex <- factor(svl_data$sex, levels = c("F", "M", "U"))
 
+
+# check for spatial autocorrelation for snake sizes
+# get a data frame with the site, sex, svl, and coords
+svl_site <- svl_data %>% 
+  select(c(site, spp, svl_cm, lat, long)) %>% 
+  group_by(site, lat, long) %>% 
+  summarise(
+    mean_svl_g = mean(svl_cm[spp == "garter"], na.rm = TRUE),
+    mean_svl_rb = mean(svl_cm[spp == "redbelly"], na.rm = TRUE)
+  )
+
+# generate a distance matrix
+svl_site_dists <- as.matrix(dist(cbind(svl_site$long, svl_site$lat)))
+# and take the inverse
+svl_site_dists_inv <- 1/svl_site_dists
+diag(svl_site_dists_inv) <- 0  # make the diagonals of the inverse distance matrix 0
+
+# calculate Moran's I for garter size
+Moran.I(svl_site$mean_svl_g, svl_site_dists_inv)
+
+# calculate Moran's I for redbelly size
+Moran.I(svl_site$mean_svl_rb, svl_site_dists_inv, na.rm = TRUE)
+
+
 ################################################################################
 
 ## Land covers scale of effect
@@ -206,10 +295,10 @@ svl_data$sex <- factor(svl_data$sex, levels = c("F", "M", "U"))
 
 
 # merge all land road data frames into one to get a single data frame with the abundance
-# and land cover data for all buffer sizes
+# and land cover data for all buffer sizes, and heterogeniety index for all buffers
 abund_lr <- abund_data
 for (i in 1:length(landroad_list)) {
-  landroad_df <- landroad_list[[i]] %>% select(site, agriculture, crop, pasture, forested, wetland, urban)
+  landroad_df <- landroad_list[[i]] %>% select(site, agriculture, crop, pasture, forested, wetland, urban, het_index)
   # change landcovers from proportions to percentages
   landroad_df <- landroad_df %>% 
     mutate(agriculture = agriculture*100,
@@ -228,7 +317,8 @@ for (i in 1:length(landroad_list)) {
            !!paste("pasture_", i*100, sep = "") := pasture,
            !!paste("forested_", i*100, sep = "") := forested,
            !!paste("wetland_", i*100, sep = "") := wetland,
-           !!paste("urban_", i*100, sep = "") := urban)
+           !!paste("urban_", i*100, sep = "") := urban,
+           !!paste("het_index_", i*100, sep = "") := het_index)
   
   abund_lr <- merge(abund_lr, landroad_df, by = "site", all.x = TRUE)
   # df_list <- list(abund_lr, landroad_df)
@@ -241,7 +331,7 @@ for (i in 1:length(landroad_list)) {
 svl_mod <- svl_data %>% select(site, spp, svl_cm) # get just the pertinent columns for svl
 svl_lr <- svl_mod
 for (i in 1:length(landroad_list)) {
-  landroad_df <- landroad_list[[i]] %>% select(site, agriculture, crop, pasture, forested, wetland, urban)
+  landroad_df <- landroad_list[[i]] %>% select(site, agriculture, crop, pasture, forested, wetland, urban, het_index)
   landroad_df <- landroad_df %>% 
     # rename the column names to correspond to the buffer size for the data being added
     # use !! to "unquote the expression" to evaluate paste() first for the new name
@@ -251,7 +341,8 @@ for (i in 1:length(landroad_list)) {
            !!paste("pasture_", i*100, sep = "") := pasture,
            !!paste("forested_", i*100, sep = "") := forested,
            !!paste("wetland_", i*100, sep = "") := wetland,
-           !!paste("urban_", i*100, sep = "") := urban)
+           !!paste("urban_", i*100, sep = "") := urban,
+           !!paste("het_index_", i*100, sep = "") := het_index)
   svl_lr <- merge(svl_lr, landroad_df, by = "site", all.x = TRUE)
 }
 
@@ -263,8 +354,8 @@ for (i in 1:length(landroad_list)) {
 # #redbelly abundance not normal
 
 # get Pearson's correlation coefficient for abundance vs all the landcovers
-# first remove the site column to have an all numerical data frame to evaluate correlation
-abund_lr_mod <- abund_lr %>% select(-c(site, year)) 
+# first select only numeric columns to evaluate correlation
+abund_lr_mod <- abund_lr %>% select_if(is.numeric) 
 corr_p <- cor(abund_lr_mod)
 
 # # since not normally distributed, get Spearman's correlation coefficient
@@ -285,6 +376,7 @@ pasture_seq <- paste(rep("pasture_"), seq(from = 100, to = 1000, by = 100), sep 
 forested_seq <- paste(rep("forested_"), seq(from = 100, to = 1000, by = 100), sep = "")
 wetland_seq <- paste(rep("wetland_"), seq(from = 100, to = 1000, by = 100), sep = "")
 urban_seq <- paste(rep("urban_"), seq(from = 100, to = 1000, by = 100), sep = "")
+het_seq <- paste(rep("het_index_"), seq(from = 100, to = 1000, by = 100), sep = "")
 
 # pearson
 # use the sequences to get all the correlation values for each land cover buffer size
@@ -294,6 +386,7 @@ pasturecorrs_gp <- corr_p["garter_count", c(pasture_seq)]
 forestedcorrs_gp <- corr_p["garter_count", c(forested_seq)]
 wetlandcorrs_gp <- corr_p["garter_count", c(wetland_seq)]
 urbancorrs_gp <- corr_p["garter_count", c(urban_seq)]
+hetcorrs_gp <- corr_p["garter_count", c(het_seq)]
 
 # find the maximum absolute value correlation coefficient
 ag_g_max_p <- which.max(abs(agcorrs_gp))
@@ -302,6 +395,7 @@ pasture_g_max_p <- which.max(abs(pasturecorrs_gp))
 forested_g_max_p <- which.max(abs(forestedcorrs_gp))
 wetland_g_max_p <- which.max(abs(wetlandcorrs_gp))
 urban_g_max_p <- which.max(abs(urbancorrs_gp))
+het_g_max_p <- which.max(abs(hetcorrs_gp))
 
 # look at how different the correlation values are for each buffer size
 summary(agcorrs_gp)
@@ -310,6 +404,7 @@ summary(pasturecorrs_gp)
 summary(forestedcorrs_gp)
 summary(wetlandcorrs_gp)
 summary(urbancorrs_gp)
+summary(hetcorrs_gp)
 
 
 # # spearman 
@@ -354,6 +449,7 @@ pasturecorrs_rbp <- corr_p["redbelly_count", c(pasture_seq)]
 forestedcorrs_rbp <- corr_p["redbelly_count", c(forested_seq)]
 wetlandcorrs_rbp <- corr_p["redbelly_count", c(wetland_seq)]
 urbancorrs_rbp <- corr_p["redbelly_count", c(urban_seq)]
+hetcorrs_rbp <- corr_p["redbelly_count", c(het_seq)]
 
 # find the maximum absolute value correlation coefficient
 ag_rb_max_p <- which.max(abs(agcorrs_rbp))
@@ -362,6 +458,7 @@ pasture_rb_max_p <- which.max(abs(pasturecorrs_rbp))
 forested_rb_max_p <- which.max(abs(forestedcorrs_rbp))
 wetland_rb_max_p <- which.max(abs(wetlandcorrs_rbp))
 urban_rb_max_p <- which.max(abs(urbancorrs_rbp))
+het_rb_max_p <- which.max(abs(hetcorrs_rbp))
 
 summary(agcorrs_rbp)
 summary(cropcorrs_rbp)
@@ -369,6 +466,7 @@ summary(pasturecorrs_rbp)
 summary(forestedcorrs_rbp)
 summary(wetlandcorrs_rbp)
 summary(urbancorrs_rbp)
+summary(hetcorrs_rbp)
 
 
 
@@ -413,6 +511,7 @@ pasturecorrs_svl_gp <- corrsvl_gp["svl_cm", c(pasture_seq)]
 forestedcorrs_svl_gp <- corrsvl_gp["svl_cm", c(forested_seq)]
 wetlandcorrs_svl_gp <- corrsvl_gp["svl_cm", c(wetland_seq)]
 urbancorrs_svl_gp <- corrsvl_gp["svl_cm", c(urban_seq)]
+hetcorrs_svl_gp <- corrsvl_gp["svl_cm", c(het_seq)]
 
 # find the maximum absolute value correlation coefficient
 ag_gsvl_max_p <- which.max(abs(agcorrs_svl_gp))
@@ -421,6 +520,7 @@ pasture_gsvl_max_p <- which.max(abs(pasturecorrs_svl_gp))
 forested_gsvl_max_p <- which.max(abs(forestedcorrs_svl_gp))
 wetland_gsvl_max_p <- which.max(abs(wetlandcorrs_svl_gp))
 urban_gsvl_max_p <- which.max(abs(urbancorrs_svl_gp))
+het_gsvl_max_p <- which.max(abs(hetcorrs_svl_gp))
 
 # look at how different the correlation values are for each buffer size
 summary(agcorrs_svl_gp)
@@ -429,32 +529,7 @@ summary(pasturecorrs_svl_gp)
 summary(forestedcorrs_svl_gp)
 summary(wetlandcorrs_svl_gp)
 summary(urbancorrs_svl_gp)
-
-
-# # spearman 
-# # use the sequences to get all the correlation values for each land cover buffer size
-# agcorrs_svl_gs <- corrsvl_gs["svl_cm", c(ag_seq)]
-# forestedcorrs_svl_gs <- corrsvl_gs["svl_cm", c(forested_seq)]
-# wetlandcorrs_svl_gs <- corrsvl_gs["svl_cm", c(wetland_seq)]
-# 
-# # find the maximum absolute value correlation coefficient
-# ag_gsvl_max_s <- which.max(abs(agcorrs_svl_gs))
-# forested_gsvl_max_s <- which.max(abs(forestedcorrs_svl_gs))
-# wetland_gsvl_max_s <- which.max(abs(wetlandcorrs_svl_gs))
-
-
-# # kendall 
-# # use the sequences to get all the correlation values for each land cover buffer size
-# cropcorrs_gk <- corr_k["garter_count", c(crop_seq)]
-# pasturecorrs_gk <- corr_k["garter_count", c(pasture_seq)]
-# forestedcorrs_gk <- corr_k["garter_count", c(forested_seq)]
-# wetlandcorrs_gk <- corr_k["garter_count", c(wetland_seq)]
-# 
-# # find the maximum absolute value correlation coefficient
-# crop_g_max_k <- which.max(abs(cropcorrs_gk))
-# pasture_g_max_k <- which.max(abs(pasturecorrs_gk))
-# forested_g_max_k <- which.max(abs(forestedcorrs_gk))
-# wetland_g_max_k <- which.max(abs(wetlandcorrs_gk))
+summary(hetcorrs_svl_gp)
 
 
 ## redbellies
@@ -470,6 +545,7 @@ pasturecorrs_svl_rbp <- corrsvl_rbp["svl_cm", c(pasture_seq)]
 forestedcorrs_svl_rbp <- corrsvl_rbp["svl_cm", c(forested_seq)]
 wetlandcorrs_svl_rbp <- corrsvl_rbp["svl_cm", c(wetland_seq)]
 urbancorrs_svl_rbp <- corrsvl_rbp["svl_cm", c(urban_seq)]
+hetcorrs_svl_rbp <- corrsvl_rbp["svl_cm", c(het_seq)]
 
 # find the maximum absolute value correlation coefficient
 ag_rbsvl_max_p <- which.max(abs(agcorrs_svl_rbp))
@@ -478,6 +554,7 @@ pasture_rbsvl_max_p <- which.max(abs(pasturecorrs_svl_rbp))
 forested_rbsvl_max_p <- which.max(abs(forestedcorrs_svl_rbp))
 wetland_rbsvl_max_p <- which.max(abs(wetlandcorrs_svl_rbp))
 urban_rbsvl_max_p <- which.max(abs(urbancorrs_svl_rbp))
+het_rbsvl_max_p <- which.max(abs(hetcorrs_svl_rbp))
 
 # look at how different the correlation values are for each buffer size
 summary(agcorrs_svl_rbp)
@@ -486,6 +563,7 @@ summary(pasturecorrs_svl_rbp)
 summary(forestedcorrs_svl_rbp)
 summary(wetlandcorrs_svl_rbp)
 summary(urbancorrs_svl_rbp)
+summary(hetcorrs_svl_rbp)
 
 ###########################################
 
@@ -498,7 +576,8 @@ buffers_abund <- c(names(ag_g_max_p), names(ag_rb_max_p),
                    names(pasture_g_max_p), names(pasture_rb_max_p),
                    names(forested_g_max_p), names(forested_rb_max_p), 
                    names(wetland_g_max_p), names(wetland_rb_max_p),
-                   names(urban_g_max_p), names(urban_rb_max_p))
+                   names(urban_g_max_p), names(urban_rb_max_p),
+                   names(het_g_max_p), names(het_rb_max_p))
 landcovers_sme_abund <- abund_lr %>% 
   select(site, all_of(buffers_abund))
 landcovers_sme_abund <- unique(landcovers_sme_abund) # have a single row for each site
@@ -514,7 +593,8 @@ buffers_svl <- c(names(ag_gsvl_max_p), names(ag_rbsvl_max_p),
                  names(pasture_gsvl_max_p), names(pasture_rbsvl_max_p),
                  names(forested_gsvl_max_p), names(forested_rbsvl_max_p), 
                  names(wetland_gsvl_max_p), names(wetland_rbsvl_max_p),
-                 names(urban_gsvl_max_p), names(urban_rbsvl_max_p))
+                 names(urban_gsvl_max_p), names(urban_rbsvl_max_p),
+                 names(het_gsvl_max_p), names(het_rbsvl_max_p))
 landcovers_sme_svl <- abund_lr %>% 
   select(site, all_of(buffers_svl))
 landcovers_sme_svl <- unique(landcovers_sme_svl) # have a single row for each site
@@ -650,4 +730,3 @@ abund_data_dfl$spp <- fct_recode(abund_data_dfl$spp,
                                  Redbelly = "redbelly_count")
 abund_data_dfl <- abund_data_dfl %>% 
   rename(Species = spp)
-
