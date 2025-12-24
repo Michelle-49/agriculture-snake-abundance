@@ -1,0 +1,34 @@
+site,num_coverboards
+Ag 3,20
+Ag 5,10
+Ag 6,16
+Ag-nat 2,20
+Ag-nat 3,10
+Ag-nat 5,14
+Ag-nat 7,15
+Ag-nat 8,14
+Ag-nat 9,14
+Half 2,10
+Half 5,10
+Half 6,14
+Half 7,20
+Half 9,12
+Half 10,10
+Nat-ag 1,15
+Nat-ag 2,20
+Nat-ag 3,18
+Nat-ag 4,13
+Nat-ag 5 old,10
+Nat-ag 5,20
+Nat-ag 6,10
+Nat-ag 7 old,10
+Nat-ag 7,10
+Nat-ag 8,10
+Nat-ag 9,10
+Nat QC 1 old,10
+Nat QC 1,10
+Nat QC 3,10
+Nat QC 4,10
+Nat QC 6,10
+Nat QC 7,20
+Nat QC 9,16
