@@ -3,12 +3,12 @@
 library(lmerTest)
 library(lmtest)
 library(nlme)
-library(tidyverse)
-library(performance)
 library(statmod)
 library(stats)
+# library(tidyverse)
+# library(performance)
 # library(DHARMa)
-library(AICcmodavg)
+# library(AICcmodavg)
 
 # source in the data
 source("data_wrangling.R")
@@ -21,6 +21,7 @@ pasture_gsvl_max_p
 forested_gsvl_max_p
 wetland_gsvl_max_p
 urban_gsvl_max_p
+het_gsvl_max_p
 
 # land cover buffers for scale of max effect for redbelly svl
 ag_rbsvl_max_p
@@ -29,6 +30,7 @@ pasture_rbsvl_max_p
 forested_rbsvl_max_p
 wetland_rbsvl_max_p
 urban_rbsvl_max_p
+het_rbsvl_max_p
 
 # set the landcover variables for the scale of max effect for garter and redbelly
 svl_data <- svl_data %>% 
@@ -43,198 +45,247 @@ svl_data <- svl_data %>%
          wetland_g = wetland_300,
          wetland_rb = wetland_1000,
          urban_g = urban_1000,
-         urban_rb = urban_300
+         urban_rb = urban_300,
+         het_index_g = het_index_100,
+         het_index_rb = het_index_300
   )
 # add a quadratic term for day of year
 svl_data <- svl_data %>% 
   mutate(day_of_year2 = I(svl_data$day_of_year^2))
 
+# filter out neonates from data set
+svl_data_ad <- svl_data %>%
+  filter(age_class != "N")
+
 
 ### Garter models
 
 # get a subset of the data for garter snakes
-svl_data_g <- svl_data %>% 
+svl_data_g <- svl_data_ad %>% 
   filter(spp == "garter")
 
 
-## 2024 veg cover
-
-svl_data_g2024 <- svl_data_g %>% 
-  filter(year == 2024)
-svl_data_g2024$sex <- as.factor(svl_data_g2024$sex)
+## Model with vegetation cover
 
 # full model
-gsvl_2024 <- lme(svl_cm ~ agriculture_g + forested_g + wetland_g + urban_g
-                      + day_of_year + temp_c + time_of_day + sex + vc_mod,
-                      random = ~ 1 | site,                   # random effects structure
-                      weights = varIdent(form = ~ 1 | sex),  # weights for variance structure
-                      data = svl_data_g2024,
-                      control =list(msMaxIter = 1000, msMaxEval = 1000),
-                      method = "REML"
-                 )
-# reduced model
-gsvl_2024_red <- update(gsvl_2024, .~. - forested_g - temp_c)
-final_mod_gsvl_2024 <- gsvl_2024_red
-
-
-# test without unsexed individuals
-svl_data_g2024_nou <- svl_data_g2024 %>% 
-  filter(sex != "U")
-
-gsvl_2024_nou <- update(gsvl_2024_red, .~., data = svl_data_g2024_nou)
-
-
-
-# novc
-
-# full model
-gsvl_novc <- lme(svl_cm ~ agriculture_g + forested_g + wetland_g + urban_g
-                        + year + day_of_year + temp_c + time_of_day + sex, 
-                      random = ~ 1 | site,                   # random effects structure
-                      weights = varIdent(form = ~ 1 | sex),  # variance weight for sex
-                      data = svl_data_g,
-                      control =list(msMaxIter = 1000, msMaxEval = 1000),
-                      na.action = na.exclude)
-# reduced model
-gsvl_novc_red <- update(gsvl_novc, .~. - temp_c - year - forested_g)
-final_mod_gsvl_novc <- gsvl_novc_red
-
-
-# test without unsexed individuals
-svl_data_g_nou <- svl_data_g %>% 
-  filter(sex != "U")
-
-gsvl_novc_nou <- update(gsvl_novc_red, .~., data = svl_data_g_nou)
-
-
-
-## crop and pasture
-
-# full model
-gsvl_crop <- lme(svl_cm ~ crop_g + pasture_g + forested_g + wetland_g + urban_g
+gsvl_crop_vc <- lme(svl_cm ~ crop_g + pasture_g + forested_g + wetland_g + urban_g
                    + day_of_year + temp_c + time_of_day + sex + vc_mod, 
                  random = ~ 1 | site,            # random effects structure
                  weights = varIdent(form = ~ 1 | sex),  # variance weight for sex
-                 data = svl_data_g2024,
+                 data = svl_data_g,
                  control =list(msMaxIter = 1000, msMaxEval = 1000),
                  na.action = na.exclude)
+summary(gsvl_crop_vc)
+
 # reduced model
-gsvl_crop_red <- update(gsvl_crop, .~. - temp_c - forested_g)
-final_mod_gsvl_crop <- gsvl_crop_red
+gsvl_crop_vc2 <- update(gsvl_crop_vc, .~. - forested_g)
+gsvl_crop_vc3 <- update(gsvl_crop_vc, .~. - forested_g - temp_c)
+summary(gsvl_crop_vc2)
+
+final_mod_gsvl_cropvc <- gsvl_crop_vc2
 
 
-# test without unsexed individuals
-gsvl_crop_nou <- update(gsvl_crop_red, .~., data = svl_data_g2024_nou)
-summary(gsvl_crop_nou)
+# LRT to compare models
+gsvl_crop_vc_ML <- update(gsvl_crop_vc, .~., method = "ML")  #change the model fitting method to ML for comparison
+gsvl_crop_vc2_ML <- update(gsvl_crop_vc2, .~., method = "ML")
+anova(gsvl_crop_vc_ML, gsvl_crop_vc2_ML)
+# no sig diff btwn models
 
+
+# check model fit
+
+plot(gsvl_crop_vc2, xlab = "fitted(gsvl_crop_vc)")
+# fitted values still somewhat clustered due to sexes, but much better
+
+# check that residuals are normally distributed
+qqnorm(residuals(gsvl_crop_vc2))
+qqline(residuals(gsvl_crop_vc2))
+# deviates a bit at the extremes, but pretty good
+
+# collinearity
+vif(gsvl_crop_vc2)
+# all VIFs < 1.5 - good
+
+
+# null hypothesis testing
+gsvl_crop_vc_null <- update(gsvl_crop_vc_ML, .~. - crop_g)
+anova(gsvl_crop_vc_null, gsvl_crop_vc_ML)
+# model without crop actually nearly significantly better
+
+
+# test with heterogeneity and connectivity indices
+
+gsvl_cropvc_ch <- update(final_mod_gsvl_cropvc, .~. + het_index_g + connected)
+summary(gsvl_cropvc_ch)
+# no correlation or other issues, but highly non-significant
+
+gsvl_cropvc_h <- update(final_mod_gsvl_cropvc, .~. + het_index_g)
+summary(gsvl_cropvc_h)
+gsvl_cropvc_c <- update(final_mod_gsvl_cropvc, .~. + connected)
+summary(gsvl_cropvc_c)
+
+#################################
+
+## Model without vegetation cover
+
+gsvl_crop <- update(gsvl_crop_vc, .~. - vc_mod)
+summary(gsvl_crop)
+
+gsvl_crop2 <- update(gsvl_crop, .~. - forested_g)
+gsvl_crop3 <- update(gsvl_crop, .~. - forested_g - temp_c)
+summary(gsvl_crop2)
+
+final_mod_gsvl_crop <- gsvl_crop2
+
+
+# LRT to compare models
+gsvl_crop_ML <- update(gsvl_crop, .~., method = "ML")
+final_mod_gsvl_crop_ML <- update(gsvl_crop2, .~., method = "ML")
+anova(gsvl_crop_ML, final_mod_gsvl_crop_ML)
+# no sig diff btwn models
+
+
+# check model fit
+
+plot(final_mod_gsvl_crop, xlab = "fitted(gsvl_crop)")
+# fitted values still somewhat clustered due to sexes, but much better
+
+# check that residuals are normally distributed
+qqnorm(residuals(final_mod_gsvl_crop))
+qqline(residuals(final_mod_gsvl_crop))
+# deviates a bit at the extremes, but not bad
+
+# collinearity
+vif(final_mod_gsvl_crop)
+# all VIFs < 1.5 - good
+
+
+# null hypothesis testing
+gsvl_crop_null <- update(gsvl_crop_ML, .~. - crop_g)
+anova(gsvl_crop_null, final_mod_gsvl_crop_ML)
+# no sig diff
+
+
+# test with heterogeneity and connectivity indices
+
+gsvl_crop_ch <- update(final_mod_gsvl_crop, .~. + het_index_g + connected)
+summary(gsvl_crop_ch)
+# no correlation or other issues, but highly non-significant
+
+gsvl_crop_h <- update(final_mod_gsvl_crop, .~. + het_index_g)
+summary(gsvl_crop_h)
+gsvl_crop_c <- update(final_mod_gsvl_crop, .~. + connected)
+summary(gsvl_crop_c)
 
 ################################################################################
 
 ### Redbelly models
 
-svl_data_rb <- svl_data %>% 
+svl_data_rb <- svl_data_ad %>% 
   filter(spp == "redbelly")
 
 
-## 2024 veg cover
-
-svl_data_rb2024 <- svl_data_rb %>% 
-  filter(year == 2024)
-
+## Fit model with vegetation cover
 
 # full model
-rbsvl_2024 <- lme(svl_cm ~ agriculture_rb + forested_rb + wetland_rb + urban_rb
-                  + day_of_year + temp_c + time_of_day + sex + vc_mod, 
-                  random = ~ 1 | site,
-                  weights = varIdent(form = ~ 1 | sex),  # weights for variance structure
-                  data = svl_data_rb2024,
-                  control =list(msMaxIter = 1000, msMaxEval = 1000),
-                  method = "ML")
-# reduced model
-rbsvl_2024_red <- update(rbsvl_2024, .~. - time_of_day)
-final_mod_rbsvl_2024 <- rbsvl_2024_red
-
-
-# test without unsexed individuals
-svl_data_rb2024_nou <- svl_data_rb2024 %>% 
-  filter(sex != "U")
-
-rbsvl_2024_nou <- update(rbsvl_2024_red, .~. , data = svl_data_rb2024_nou)
-
-
-# novc
-
-# full model
-rbsvl_novc <- lme(svl_cm ~ agriculture_rb + forested_rb + wetland_rb + urban_rb
-                         + year + day_of_year + temp_c + time_of_day + sex, 
-                       random = ~ 1 | site,
-                       weights = varIdent(form = ~ 1 | sex),  # weights for variance structure
-                       data = svl_data_rb,
-                       # control =list(msMaxIter = 1000, msMaxEval = 1000),
-                       na.action = na.exclude)
-# reduced model
-rbsvl_novc_red <- update(rbsvl_novc, .~. - year - time_of_day)
-final_mod_rbsvl_novc <- rbsvl_novc_red
-
-
-# test without unsexed individuals
-svl_data_rb_nou <- svl_data_rb %>% 
-  filter(sex != "U")
-
-rbsvl_novc_nou <- update(rbsvl_novc_red, .~., data = svl_data_rb_nou)
-
-
-
-## crop and pasture
-
-# full model
-rbsvl_crop <- lme(svl_cm ~ crop_rb + pasture_rb + forested_rb + wetland_rb + urban_rb
+rbsvl_crop_vc <- lme(svl_cm ~ crop_rb + pasture_rb + forested_rb + wetland_rb + urban_rb
                     + day_of_year + temp_c + time_of_day + sex + vc_mod, 
                   random = ~ 1 | site,
                   weights = varIdent(form = ~ 1 | sex),  # weights for variance structure
-                  data = svl_data_rb2024,
+                  data = svl_data_rb,
                   control =list(msMaxIter = 1000, msMaxEval = 1000),
                   na.action = na.exclude)
+summary(rbsvl_crop_vc)
+
 # reduced model
-rbsvl_crop_red <- update(rbsvl_crop, .~. - time_of_day - forested_rb)
-final_mod_rbsvl_crop <- rbsvl_crop_red
+rbsvl_crop_vc2 <- update(rbsvl_crop_vc, .~. - forested_rb)
+rbsvl_crop_vc3 <- update(rbsvl_crop_vc, .~. - forested_rb - time_of_day)
+summary(rbsvl_crop_vc2)
+
+final_mod_rbsvl_cropvc <- rbsvl_crop_vc2
 
 
-# testing without unsexed individuals
-rbsvl_crop_nou <- update(rbsvl_crop_red, .~., data = svl_data_rb2024_nou)
+# LRT to compare models
+rbsvl_crop_vc_ML <- update(rbsvl_crop_vc, .~., method = "ML")
+rbsvl_crop_vc2_ML <- update(rbsvl_crop_vc2, .~., method = "ML")
+anova(rbsvl_crop_vc_ML, rbsvl_crop_vc2_ML)
+# no sig diff btwn models
 
 
-# model comparisons
+# check model fit
 
-gsvl_2024_ML <- update(gsvl_2024, .~., method = "ML")
-gsvl_2024_redML <- update(gsvl_2024_red, .~., method = "ML")
-anova(gsvl_2024_ML, gsvl_2024_redML)
-aictab(list(gsvl_2024_ML, gsvl_2024_redML), modnames = c("gsvl_2024_ML", "gsvl_2024_redML"))
+plot(rbsvl_crop_vc2, xlab = "fitted(rbsvl_crop_vc2)")
+# fitted values clustered due to sexes
 
-gsvl_novc_ML <- update(gsvl_novc, .~., method = "ML")
-gsvl_novc_redML <- update(gsvl_novc_red, .~., method = "ML")
-anova(gsvl_novc_ML, gsvl_novc_redML)
-aictab(list(gsvl_novc_ML, gsvl_novc_redML), modnames = c("gsvl_novc_ML", "gsvl_novc_redML"))
+# check that residuals are normally distributed
+qqnorm(residuals(rbsvl_crop_vc2))
+qqline(residuals(rbsvl_crop_vc2))
+# deviates a bit, not bad
 
-gsvl_crop_ML <- update(gsvl_crop, .~., method = "ML")
-gsvl_crop_redML <- update(gsvl_crop_red, .~., method = "ML")
-anova(gsvl_crop_ML, gsvl_crop_redML)
-aictab(list(gsvl_crop_ML, gsvl_crop_redML), modnames = c("gsvl_crop_ML", "gsvl_crop_redML"))
+# collinearity
+vif(rbsvl_crop_vc2)
+# VIFs < 2.8 - still good
 
 
-rbsvl_2024_ML <- update(rbsvl_2024, .~., method = "ML")
-rbsvl_2024_redML <- update(rbsvl_2024_red, .~., method = "ML")
-anova(rbsvl_2024_ML, rbsvl_2024_redML)
-aictab(list(rbsvl_2024_ML, rbsvl_2024_redML), modnames = c("rbsvl_2024_ML", "rbsvl_2024_redML"))
+# null hypothesis testing
+rbsvl_crop_vc_null <- update(rbsvl_crop_vc2_ML, .~. - crop_rb)
+anova(rbsvl_crop_vc_null, rbsvl_crop_vc2_ML)
+# no sig diff
 
-rbsvl_novc_ML <- update(rbsvl_novc, .~., method = "ML")
-rbsvl_novc_redML <- update(rbsvl_novc_red, .~., method = "ML")
-anova(rbsvl_novc_ML, rbsvl_novc_redML)
-aictab(list(rbsvl_novc_ML, rbsvl_novc_redML), modnames = c("rbsvl_novc_ML", "rbsvl_nocv_redML"))
 
+# test with heterogeneity and connectivity indices
+
+rbsvl_cropvc_h <- update(final_mod_rbsvl_cropvc, .~. + het_index_rb)
+summary(rbsvl_cropvc_h)
+# correlated and highly non-sig
+
+# cannot include connectivity b/c redbellys only found at connected sites, 
+# so interpreting variable as having only one level of factors
+
+
+####################################
+
+## Model without vegetation cover
+rbsvl_crop <- update(rbsvl_crop_vc, .~. - vc_mod)
+summary(rbsvl_crop)
+
+# reduce the model - forested correlated with crop
+rbsvl_crop2 <- update(rbsvl_crop, .~. - forested_rb)
+summary(rbsvl_crop2)
+
+final_mod_rbsvl_crop <- rbsvl_crop2
+
+
+# LRT to compare models
 rbsvl_crop_ML <- update(rbsvl_crop, .~., method = "ML")
-rbsvl_crop_redML <- update(rbsvl_crop_red, .~., method = "ML")
-anova(rbsvl_crop_ML, rbsvl_crop_redML)
-aictab(list(rbsvl_crop_ML, rbsvl_crop_redML), modnames = c("rbsvl_crop_ML", "rbsvl_crop_redML"))
+rbsvl_crop2_ML <- update(rbsvl_crop2, .~., method = "ML")
+anova(rbsvl_crop_ML, rbsvl_crop2_ML)
+# no sig diff btwn models
 
 
+# check model fit
+
+plot(rbsvl_crop2, xlab = "fitted(rbsvl_crop2)")
+# fitted values clustered due to sexes
+
+# check that residuals are normally distributed
+qqnorm(residuals(rbsvl_crop2))
+qqline(residuals(rbsvl_crop2))
+# deviates a bit, not bad
+
+# collinearity
+vif(rbsvl_crop2)
+# VIFs <= 2.0 - good
+
+
+# null hypothesis testing
+rbsvl_crop_null <- update(rbsvl_crop2_ML, .~. - crop_rb)
+anova(rbsvl_crop_null, rbsvl_crop2_ML)
+# no sig diff
+
+
+# test with heterogeneity and connectivity indices
+
+rbsvl_crop_h <- update(final_mod_rbsvl_crop, .~. + het_index_rb)
+summary(rbsvl_crop_h)
+# correlated and non-sig
