@@ -5,6 +5,7 @@ library(lmtest)
 library(nlme)
 library(statmod)
 library(stats)
+library(car)
 # library(tidyverse)
 # library(performance)
 # library(DHARMa)
@@ -79,6 +80,7 @@ summary(gsvl_crop_vc)
 
 # reduced model
 gsvl_crop_vc2 <- update(gsvl_crop_vc, .~. - forested_g)
+gsvl_crop_vc3 <- update(gsvl_crop_vc, .~. - forested_g - temp_c)
 summary(gsvl_crop_vc2)
 
 final_mod_gsvl_cropvc <- gsvl_crop_vc2
@@ -102,13 +104,21 @@ qqline(residuals(gsvl_crop_vc2))
 # deviates a bit at the extremes, but pretty good
 
 # collinearity
-vif(gsvl_crop_vc2)
-# all VIFs < 1.5 - good
+# run a fixed effects model to be able to run vif()
+final_mod_gsvl_cropvc_fixed <- lm(svl_cm ~ crop_g + pasture_g + wetland_g + urban_g
+                                   + day_of_year + temp_c + time_of_day + sex + vc_mod,
+                                   data = svl_data_g,
+                                   control =list(msMaxIter = 1000, msMaxEval = 1000),
+                                   na.action = na.exclude)
+
+car::vif(final_mod_gsvl_cropvc_fixed)
+# all VIFs < 2 - good
 
 
 # null hypothesis testing
 gsvl_crop_vc_null <- update(gsvl_crop_vc_ML, .~. - crop_g)
 anova(gsvl_crop_vc_null, gsvl_crop_vc_ML)
+# model without crop actually nearly significantly better
 
 
 # test with heterogeneity and connectivity indices
@@ -130,6 +140,7 @@ gsvl_crop <- update(gsvl_crop_vc, .~. - vc_mod)
 summary(gsvl_crop)
 
 gsvl_crop2 <- update(gsvl_crop, .~. - forested_g)
+gsvl_crop3 <- update(gsvl_crop, .~. - forested_g - temp_c)
 summary(gsvl_crop2)
 
 final_mod_gsvl_crop <- gsvl_crop2
@@ -153,8 +164,15 @@ qqline(residuals(final_mod_gsvl_crop))
 # deviates a bit at the extremes, but not bad
 
 # collinearity
-vif(final_mod_gsvl_crop)
-# all VIFs < 1.5 - good
+# run a fixed effects model to be able to run vif()
+final_mod_gsvl_crop_fixed <- lm(svl_cm ~ crop_g + pasture_g + wetland_g + urban_g
+                                  + day_of_year + temp_c + time_of_day + sex,
+                                  data = svl_data_g,
+                                  control =list(msMaxIter = 1000, msMaxEval = 1000),
+                                  na.action = na.exclude)
+
+car::vif(final_mod_gsvl_crop_fixed)
+# all VIFs < 2 - good
 
 
 # null hypothesis testing
@@ -196,6 +214,7 @@ summary(rbsvl_crop_vc)
 
 # reduced model
 rbsvl_crop_vc2 <- update(rbsvl_crop_vc, .~. - forested_rb)
+rbsvl_crop_vc3 <- update(rbsvl_crop_vc, .~. - forested_rb - time_of_day)
 summary(rbsvl_crop_vc2)
 
 final_mod_rbsvl_cropvc <- rbsvl_crop_vc2
@@ -219,8 +238,15 @@ qqline(residuals(rbsvl_crop_vc2))
 # deviates a bit, not bad
 
 # collinearity
-vif(rbsvl_crop_vc2)
-# VIFs < 2.8 - still good
+# run a fixed effects model to be able to run vif()
+final_mod_rbsvl_cropvc_fixed <- lm(svl_cm ~ crop_rb + pasture_rb + wetland_rb + urban_rb
+                                   + day_of_year + temp_c + time_of_day + sex + vc_mod, 
+                                   data = svl_data_rb,
+                                   control =list(msMaxIter = 1000, msMaxEval = 1000),
+                                   na.action = na.exclude)
+
+car::vif(final_mod_rbsvl_cropvc_fixed)
+# all VIFs < 3 - good
 
 
 # null hypothesis testing
@@ -237,6 +263,7 @@ summary(rbsvl_cropvc_h)
 
 # cannot include connectivity b/c redbellys only found at connected sites, 
 # so interpreting variable as having only one level of factors
+
 
 ####################################
 
@@ -269,8 +296,15 @@ qqline(residuals(rbsvl_crop2))
 # deviates a bit, not bad
 
 # collinearity
-vif(rbsvl_crop2)
-# VIFs <= 2.0 - good
+# run a fixed effects model to be able to run vif()
+final_mod_rbsvl_crop_fixed <- lm(svl_cm ~ crop_rb + pasture_rb + wetland_rb + urban_rb
+                                   + day_of_year + temp_c + time_of_day + sex, 
+                                   data = svl_data_rb,
+                                   control =list(msMaxIter = 1000, msMaxEval = 1000),
+                                   na.action = na.exclude)
+
+car::vif(final_mod_rbsvl_crop_fixed)
+# all VIFs < 3 - good
 
 
 # null hypothesis testing
@@ -284,4 +318,7 @@ anova(rbsvl_crop_null, rbsvl_crop2_ML)
 rbsvl_crop_h <- update(final_mod_rbsvl_crop, .~. + het_index_rb)
 summary(rbsvl_crop_h)
 # correlated and non-sig
+summary(rbsvl_crop_h)
+# correlated and non-sig
+
 
