@@ -84,7 +84,7 @@ for (i in 1:length(landroad_list)) {
 
 # append vegetation cover pixel data
 # read in the veg cover file
-pixel_data <- read.csv("output/VC_pixels_total1.csv")
+pixel_data <- read.csv("VC_pixels_total1.csv")
 
 # get the average vegetation cover for each site
 vc_data <- pixel_data %>% 
@@ -730,4 +730,5 @@ abund_data_dfl$spp <- fct_recode(abund_data_dfl$spp,
                                  Redbelly = "redbelly_count")
 abund_data_dfl <- abund_data_dfl %>% 
   rename(Species = spp)
+
 
