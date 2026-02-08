@@ -79,7 +79,6 @@ summary(gsvl_crop_vc)
 
 # reduced model
 gsvl_crop_vc2 <- update(gsvl_crop_vc, .~. - forested_g)
-gsvl_crop_vc3 <- update(gsvl_crop_vc, .~. - forested_g - temp_c)
 summary(gsvl_crop_vc2)
 
 final_mod_gsvl_cropvc <- gsvl_crop_vc2
@@ -110,7 +109,6 @@ vif(gsvl_crop_vc2)
 # null hypothesis testing
 gsvl_crop_vc_null <- update(gsvl_crop_vc_ML, .~. - crop_g)
 anova(gsvl_crop_vc_null, gsvl_crop_vc_ML)
-# model without crop actually nearly significantly better
 
 
 # test with heterogeneity and connectivity indices
@@ -132,7 +130,6 @@ gsvl_crop <- update(gsvl_crop_vc, .~. - vc_mod)
 summary(gsvl_crop)
 
 gsvl_crop2 <- update(gsvl_crop, .~. - forested_g)
-gsvl_crop3 <- update(gsvl_crop, .~. - forested_g - temp_c)
 summary(gsvl_crop2)
 
 final_mod_gsvl_crop <- gsvl_crop2
@@ -199,7 +196,6 @@ summary(rbsvl_crop_vc)
 
 # reduced model
 rbsvl_crop_vc2 <- update(rbsvl_crop_vc, .~. - forested_rb)
-rbsvl_crop_vc3 <- update(rbsvl_crop_vc, .~. - forested_rb - time_of_day)
 summary(rbsvl_crop_vc2)
 
 final_mod_rbsvl_cropvc <- rbsvl_crop_vc2
@@ -241,7 +237,6 @@ summary(rbsvl_cropvc_h)
 
 # cannot include connectivity b/c redbellys only found at connected sites, 
 # so interpreting variable as having only one level of factors
-
 
 ####################################
 
@@ -289,3 +284,4 @@ anova(rbsvl_crop_null, rbsvl_crop2_ML)
 rbsvl_crop_h <- update(final_mod_rbsvl_crop, .~. + het_index_rb)
 summary(rbsvl_crop_h)
 # correlated and non-sig
+
