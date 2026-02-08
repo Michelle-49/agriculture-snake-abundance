@@ -19,7 +19,7 @@ library(ape)
 
 # Ag inventory land covers for each buffer size
 # create a list of the land cover files
-landcover_files <- list.files(path = "data/transectbuffer_landcovers", pattern = "landcovers_", full.names = TRUE)
+landcover_files <- list.files(path = "data/transectbuffers_landcovers", pattern = "landcovers_", full.names = TRUE)
 # change the order so landcover_100 is first and _1000 is last
 landcover_files <- landcover_files[c(2:10, 1)]
 
@@ -730,3 +730,4 @@ abund_data_dfl$spp <- fct_recode(abund_data_dfl$spp,
                                  Redbelly = "redbelly_count")
 abund_data_dfl <- abund_data_dfl %>% 
   rename(Species = spp)
+
