@@ -301,21 +301,6 @@ inc.dec <- function (value, opt) {
             value < 0 & opt == 3 ~ "decline")
 }
 
-# # get a list of the back-transformed parameter estimates (count scale) per unit increase
-# bt.param.est.list <- function(model, mod_data) {
-#   param_est <- data.frame(parameter = as.character(), estimate = as.numeric())
-#   var_names <- row.names(coef(summary(model)))[2:nrow(coef(summary(model)))] # get all variables except the intercept
-#   for (i in 1:length(var_names)) {
-#     unsc_variable <- gsub("sc", "", var_names[i])
-#     est <- exp(coef(summary(model))[as.character(var_names[i]), "Estimate"]/sd(mod_data[ ,unsc_variable]))
-#     param_est <- rbind(param_est, list(var_names[i], est))
-#   }
-#   
-#   colnames(param_est) <- c("parameter", "estimate")
-#   rownames(param_est) <- c(param_est$parameter)
-#   return(param_est)
-# }
-
 
 # modified version to use _gsc _rbsc global variable names
 
@@ -350,31 +335,6 @@ bt10.param.est.list <- function(model, mod_data, variables_list) {
 }
 
 
-
-# # get a data frame with the CI and the std dev of each variable
-# CI.SD.df <- function(model, mod_data) {
-#   # 95% CI (SD scaled and log scale)
-#   CI_orig <- as.data.frame(confint(model, method = "Wald"))
-#   CI_vars <- CI_orig[-c(1:2), ] # get rid of the .sig and intercept rows
-#   
-#   # list the variables in the model (removing "sc" to get the un-scaled variable names)
-#   vars_names <- gsub("sc", "", row.names(CI_vars))
-#   variables <- mod_data %>% select(all_of(vars_names))
-#   variables_SD <- sapply(variables, sd)
-#   variables_SD <- as.data.frame(variables_SD)
-#   variables_SD <- rownames_to_column(variables_SD, "variable")
-#   # append to the CI dataframe
-#   SD <- variables_SD[order(variables_SD[, "variable"]), "variables_SD"]
-#   CI_sd <- cbind(CI_vars[order(row.names(CI_vars)), ], SD)
-#   CI_sd <- CI_sd %>%
-#     rename("lower" = "2.5 %",
-#            "upper" = "97.5 %")
-#   
-#   return(CI_sd)
-# }
-
-
-
 # modified for using global _gsc _rbsc variables
 
 # get a data frame with the CI and the std dev of each variable
@@ -401,92 +361,6 @@ CI.SD.df <- function(model, mod_data, variables_list) {
   
   return(CI_sd)
 }
-
-
-
-# ### WORK IN PROGRESS
-# # get a plot of abundance model predictions for specified variable of interest
-# abund.pred.plot <- function(model, variable, variable_name, mod_colour) {
-#   # get model predictions
-#   preds <- predict_response(model, 
-#                               terms = as.character(variable_name),
-#                               condition = c(num_coverboards = 1),
-#                               margin = "empirical",
-#                               vcov = get_varcov(model))
-#   
-#   # construct an agriculture column (for setting the geom_ribbon on the x-axis)
-#   preds <- preds %>% 
-#     mutate(variable_name = seq(min(variable), 
-#                           max(variable), 
-#                           length.out = nrow(preds)))
-#   
-#   
-#   # marginal = "empirical" 
-#   # answers: What is the predicted (or: expected) value of the response at meaningful 
-#   # values or levels of my focal terms for the ‘average’ observation in the population?”.
-#   # Not only refers to actual data in your sample, but also “what would be if” 
-#   # we had more data, or if we had data from a different population
-#   
-#   
-#   # plot using ggeffects base plot and sjPlot mechanics
-#   pred_plot <- plot(preds,
-#                       show_data = TRUE,
-#                       show_title = FALSE,
-#                       show_x_title = FALSE,
-#                       show_y_title = FALSE,
-#                       jitter = 0.025,
-#                       colors = as.character(mod_colour)) +
-#     # labs(tag = "A") +
-#     set_theme(base = theme_classic(),     # need sjPlot for set_theme
-#               axis.linecolor = "black",
-#               axis.textcolor = "black",
-#               axis.textsize = 0.9,
-#               axis.title.size = 1
-#     )
-#   return(pred_plot)
-# }
-
-
-
-# ### WORK IN PROGRESS
-# # get a plot of svl model predictions for specified variable of interest
-# svl.pred.plot <- function(model, variable, variable_name, colour_list) {
-#   # get predictions from the model
-#   preds <- predict_response(model,
-#                             terms = c(paste(.data[[variable_name]], "[all]", sep = " "), "sex"),
-#                             margin = "empirical",
-#                             vcov = get_varcov(model))
-#   
-#   # construct an agriculture column (for setting the geom_ribbon on the x-axis)
-#   preds <- preds %>% 
-#     mutate(variable_name = seq(min(variable), 
-#                           max(variable), 
-#                           length.out = nrow(preds)))
-#   
-#   
-#   # plotting using ggeffects base plot and sjPlot mechanics
-#   pred_plot <- plot(preds,
-#                           show_data = TRUE,
-#                           show_title = FALSE,
-#                           show_x_title = FALSE,
-#                           show_y_title = FALSE,
-#                           jitter = 0.025,
-#                           # colors = c("#913143", "#314391", "#439131")
-#   ) +
-#     scale_y_continuous(breaks = seq(10, 70, by = 10)) +
-#     scale_colour_manual(values = colour_list,
-#                         labels = c("Female", "Male", "Unsexed")) +
-#     scale_fill_manual(values = colour_list) +
-#     labs(tag = "A",
-#          colour = "Sex") +
-#     set_theme(base = theme_classic(),
-#               axis.linecolor = "black",
-#               axis.textcolor = "black",
-#               axis.textsize = 0.9,
-#               axis.title.size = 1
-#     )
-#   
-# }
 
 
 # function to extract the legend from a plot
@@ -678,7 +552,7 @@ abund.pred.plots <- function(plotting_mods_list, data, variables) {
       abund_plots_list[[i]] <- local({
         i <- i
         pred_plot <- ggplot(data = abund_data, aes(x = crop_gsc, y = garter_count/num_coverboards), colour = "#107425") +
-          geom_point(shape = 1) +
+          geom_point(shape = 1, colour = "#107425") +
           geom_jitter(height = 0.025, width = 0.15, colour = "#107425", shape = 1) +
           # xlim(-1, max(abund_data$agriculture_gsc)) +
           geom_line(data = preds_g, aes(x, predicted), lwd = 1, colour = "#107425") +
@@ -851,3 +725,6 @@ overdisp_fun <- function(model) {
   pval <- pchisq(Pearson.chisq, df = rdf, lower.tail = FALSE, log.p = TRUE)
   c(chisq = Pearson.chisq, ratio = prat, p = exp(pval))
 }
+
+
+
