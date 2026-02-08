@@ -98,7 +98,7 @@ testZeroInflation(sim_gcrop_vc, plot = TRUE)
 
 
 # look at VIFs (variance inflation factors) for collinearity
-vif(final_mod_gcrop_vc)
+car::vif(final_mod_gcrop_vc)
 # all vifs < 2
 
 
@@ -154,7 +154,7 @@ testZeroInflation(sim_gcrop, plot = TRUE)
 
 
 # look at VIFs (variance inflation factors) for collinearity
-vif(final_mod_gcrop)
+car::vif(final_mod_gcrop)
 # all vifs < 2
 
 
@@ -216,7 +216,7 @@ testZeroInflation(sim_rbcrop_vc, plot = TRUE)
 # no zero inflation
 
 # look at collinearity
-vif(final_mod_rbcrop_vc)
+car::vif(final_mod_rbcrop_vc)
 # good
 
 
@@ -268,7 +268,7 @@ testZeroInflation(sim_rbcrop, plot = TRUE)
 # no zero inflation
 
 # look at collinearity
-vif(final_mod_rbcrop)
+car::vif(final_mod_rbcrop)
 # good
 
 
@@ -298,4 +298,5 @@ performance::r2(final_mod_gcrop_vc)
 
 performance::r2(final_mod_rbcrop)
 performance::r2(final_mod_rbcrop_vc)
+
 
