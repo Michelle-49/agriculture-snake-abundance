@@ -76,7 +76,6 @@ summary(gcrop_vc)
 
 # reduce the model - remove forest b/c correlated
 gcrop_vc2 <- update(gcrop_vc, .~. - forested_gsc)
-gcrop_vc3 <- update(gcrop_vc, .~. - forested_gsc - temp_csc)
 summary(gcrop_vc2)
 
 final_mod_gcrop_vc <- gcrop_vc2
@@ -133,7 +132,6 @@ summary(gcrop)
 
 # reduce the model - remove forest b/c of correlation
 gcrop_2 <- update(gcrop, .~. - forested_gsc)
-gcrop_3 <- update(gcrop, .~. - forested_gsc - temp_csc)
 summary(gcrop_2)
 
 final_mod_gcrop <- gcrop_2
@@ -198,11 +196,10 @@ summary(rbcrop_vc)
 
 # reduce the model
 rbcrop_vc2 <- update(rbcrop_vc, .~. - forested_rbsc)
-rbcrop_vc3 <- update(rbcrop_vc, .~. - forested_rbsc - temp_csc)
+summary(rbcrop_vc2)
 
 final_mod_rbcrop_vc <- rbcrop_vc2
 
-summary(final_mod_rbcrop_vc)
 
 # check model fit
 
@@ -250,7 +247,7 @@ summary(rbcrop)
 
 # reduce the model
 rbcrop_2 <- update(rbcrop, .~. - forested_rbsc)
-rbcrop_3 <- update(rbcrop, .~. - forested_rbsc - temp_csc)
+summary(rbcrop_2)
 
 final_mod_rbcrop <- rbcrop_2
 
@@ -301,6 +298,4 @@ performance::r2(final_mod_gcrop_vc)
 
 performance::r2(final_mod_rbcrop)
 performance::r2(final_mod_rbcrop_vc)
-# 2024 model has higher R2 for redbelly models
-
 
